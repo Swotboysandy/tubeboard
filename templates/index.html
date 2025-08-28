@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>YouTube Click Uploader</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; color: #eaeaea; background: #0f1115; }
+    h1 { font-size: 22px; }
+    .card { background: #171923; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .flex { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    button { padding: 8px 12px; border-radius: 8px; border: 0; cursor: pointer; }
+    .primary { background: #2563eb; color: white; }
+    .secondary { background: #334155; color: white; }
+    .success { color: #10b981; }
+    .error { color: #ef4444; }
+    .muted { color: #94a3b8; font-size: 12px; }
+    a { color: #93c5fd; text-decoration: none; }
+    .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+    .authed { background: #065f46; color: #d1fae5; }
+    .notauthed { background: #7f1d1d; color: #fee2e2; }
+    code { background: #0b0e14; padding: 2px 6px; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>YouTube Click Uploader</h1>
+
+  <div class="card">
+    <div class="flex">
+      <a href="{{ url_for('account_form') }}"><button class="primary">+ Add Account</button></a>
+      <button class="secondary" onclick="refresh()">Refresh</button>
+    </div>
+    <p class="muted">Create multiple YouTube upload profiles. Authorize each once, then click “Run” to upload the next video from your configured source.</p>
+  </div>
+
+  {% for a in accounts %}
+  <div class="card">
+    <div class="flex" style="justify-content: space-between;">
+      <div>
+        <div><strong>{{ a.name }}</strong></div>
+        <div class="muted">
+          {% if a.channel_title %} Channel: <strong>{{ a.channel_title }}</strong> · {% endif %}
+          Prefix: <code>{{ a.state_prefix }}</code>
+        </div>
+      </div>
+      <div class="flex">
+        {% if a.authed %}
+          <span class="pill authed">Authorized</span>
+        {% else %}
+          <span class="pill notauthed">Not Authorized</span>
+        {% endif %}
+        <a href="{{ url_for('account_form', idx=loop.index0) }}"><button class="secondary">Edit</button></a>
+        {% if a.authed %}
+          <button class="primary" onclick="runIdx({{ loop.index0 }})">▶ Run</button>
+        {% else %}
+          <a href="{{ url_for('auth_start', idx=loop.index0) }}"><button class="primary">Authorize</button></a>
+        {% endif %}
+      </div>
+    </div>
+    <div style="margin-top: 8px;">
+      {% if a.status.status == "success" %}
+        <span class="success">✔ Last run: {{ a.status.last_run }}</span>
+        <div class="muted">Message: {{ a.status.message }}</div>
+      {% elif a.status.status == "error" %}
+        <span class="error">✘ Last run: {{ a.status.last_run }}</span>
+        <div class="muted">Message: {{ a.status.message }}</div>
+      {% else %}
+        <span class="muted">Never run</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+<script>
+async function runIdx(idx) {
+  const res = await fetch(`/run/${idx}`, {method: 'POST'});
+  const data = await res.json();
+  if (!res.ok) {
+    alert('Error: ' + (data.error || JSON.stringify(data)));
+  } else {
+    alert('Started! Check status after a few seconds.');
+    setTimeout(refresh, 1500);
+  }
+}
+function refresh() {
+  location.reload();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Account</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; color: #eaeaea; background: #0f1115; }
+    .card { background: #171923; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    label { display: block; margin-top: 12px; font-weight: 600; }
+    input, select { width: 100%; padding: 8px; margin-top: 6px; border-radius: 8px; border: 1px solid #2d3748; background: #0b0e14; color: #eaeaea; }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+    button { padding: 10px 14px; border-radius: 8px; border: 0; background: #2563eb; color: white; cursor: pointer; margin-top: 16px; }
+    a { color: #93c5fd; text-decoration: none; }
+    .muted { color: #94a3b8; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <form method="POST">
+      <h2>{{ 'Edit' if account else 'New' }} YouTube Account</h2>
+      <div class="row">
+        <div>
+          <label>Name</label>
+          <input name="name" required value="{{ account.name if account else '' }}"/>
+        </div>
+        <div>
+          <label>State Prefix</label>
+          <input name="state_prefix" required placeholder="yt_main" value="{{ account.state_prefix if account else '' }}"/>
+        </div>
+        <div>
+          <label>Type</label>
+          <select name="type">
+            <option value="video" {% if account and account.type=='video' %}selected{% endif %}>Standard Video</option>
+            <option value="short" {% if account and account.type=='short' %}selected{% endif %}>Short</option>
+          </select>
+        </div>
+      </div>
+
+      <h3>Content Sources</h3>
+      <div class="row">
+        <div>
+          <label>Video Base URL (files: vid.mp4, vid (1).mp4, ...)</label>
+          <input name="video_base_url" required value="{{ account.video_base_url if account else '' }}" placeholder="https://example.com/video-folder"/>
+        </div>
+        <div>
+          <label>Title Lines URL (one title per line)</label>
+          <input name="title_url" value="{{ account.title_url if account else '' }}" placeholder="https://example.com/titles.txt"/>
+        </div>
+        <div>
+          <label>Description Lines URL (one description per line)</label>
+          <input name="description_url" value="{{ account.description_url if account else '' }}" placeholder="https://example.com/descriptions.txt"/>
+        </div>
+        <div>
+          <label>Tags Lines URL (comma or space separated)</label>
+          <input name="tags_url" value="{{ account.tags_url if account else '' }}" placeholder="https://example.com/tags.txt"/>
+        </div>
+        <div>
+          <label>Thumbnail Base URL (files: thumb (1).jpg, ...)</label>
+          <input name="thumbnail_base_url" value="{{ account.thumbnail_base_url if account else '' }}" placeholder="https://example.com/thumbs"/>
+        </div>
+      </div>
+
+      <h3>Google OAuth</h3>
+      <p class="muted">Use a unique token file per account. Make sure your OAuth consent screen and Client ID are configured in Google Cloud, with an authorized redirect URI like <code>http://127.0.0.1:5000/oauth2callback</code>.</p>
+      <div class="row">
+        <div>
+          <label>Client Secrets JSON Path</label>
+          <input name="client_secrets_file" required value="{{ account.client_secrets_file if account else '' }}" placeholder="secrets/client_secret.json"/>
+        </div>
+        <div>
+          <label>Token File Path (will be created)</label>
+          <input name="token_file" required value="{{ account.token_file if account else '' }}" placeholder="tokens/yt_main.json"/>
+        </div>
+      </div>
+
+      <h3>Upload Options</h3>
+      <div class="row">
+        <div>
+          <label>Privacy</label>
+          <select name="privacy_status">
+            <option value="private" {% if account and account.privacy_status=='private' %}selected{% endif %}>Private</option>
+            <option value="unlisted" {% if account and account.privacy_status=='unlisted' %}selected{% endif %}>Unlisted</option>
+            <option value="public" {% if account and account.privacy_status=='public' %}selected{% endif %}>Public</option>
+          </select>
+        </div>
+        <div>
+          <label>Category ID</label>
+          <input name="category_id" value="{{ account.category_id if account else '22' }}" placeholder="22"/>
+        </div>
+        <div>
+          <label>Default Language (e.g. en, nl)</label>
+          <input name="default_language" value="{{ account.default_language if account else '' }}"/>
+        </div>
+        <div>
+          <label>Playlist ID (optional)</label>
+          <input name="playlist_id" value="{{ account.playlist_id if account else '' }}"/>
+        </div>
+        <div>
+          <label>Schedule Publish At (RFC3339, e.g. 2025-08-30T06:30:00Z)</label>
+          <input name="schedule_publish_at" value="{{ account.schedule_publish_at if account else '' }}"/>
+        </div>
+        <div>
+          <label>Made For Kids?</label>
+          <select name="made_for_kids">
+            <option value="false" {% if account and account.made_for_kids=='false' %}selected{% endif %}>No</option>
+            <option value="true" {% if account and account.made_for_kids=='true' %}selected{% endif %}>Yes</option>
+          </select>
+        </div>
+        <div>
+          <label>Self-Declared Made For Kids?</label>
+          <select name="self_declared_mfk">
+            <option value="false" {% if account and account.self_declared_mfk=='false' %}selected{% endif %}>No</option>
+            <option value="true" {% if account and account.self_declared_mfk=='true' %}selected{% endif %}>Yes</option>
+          </select>
+        </div>
+        <div>
+          <label>Enable Comments?</label>
+          <select name="enable_comments">
+            <option value="true" {% if not account or account.enable_comments!='false' %}selected{% endif %}>Yes</option>
+            <option value="false" {% if account and account.enable_comments=='false' %}selected{% endif %}>No</option>
+          </select>
+        </div>
+      </div>
+
+      <button type="submit">Save</button>
+      <a href="{{ url_for('index') }}" style="margin-left: 8px;">Cancel</a>
+    </form>
+  </div>
+</body>
+</html>

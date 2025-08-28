@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Unicornshid",
+    "state_prefix": "yt_unicorn",
+    "type": "short",
+    "video_base_url": "https://instimage.vercel.app/vid/",
+    "title_url": "",
+    "description_url": "",
+    "tags_url": "",
+    "thumbnail_base_url": "",
+    "slides_per_post": 1,
+    "client_secrets_file": "secrets\\client_secret.json",
+    "token_file": "tokens/yt_unicorn.json",
+    "privacy_status": "unlisted",
+    "category_id": "22",
+    "made_for_kids": "false",
+    "self_declared_mfk": "false",
+    "default_language": "",
+    "playlist_id": "",
+    "schedule_publish_at": "",
+    "enable_comments": "true"
+  }
+]

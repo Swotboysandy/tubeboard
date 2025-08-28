@@ -1,0 +1,8 @@
+# .gitignore
+secrets/
+tokens/
+*.env
+.env*
+*.pem
+*.p12
+*.keystore
