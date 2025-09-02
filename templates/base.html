@@ -1,0 +1,59 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{% block title %}YouTube Click Uploader{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #0f1115; --card:#171923; --txt:#eaeaea; --muted:#94a3b8;
+      --pri:#2563eb; --sec:#334155; --ok:#10b981; --err:#ef4444; --pill:#0b1220;
+    }
+    *{box-sizing:border-box}
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+           margin:0; color: var(--txt); background: var(--bg);}
+    header { padding:16px 20px; border-bottom:1px solid #1f2430}
+    main { padding:20px; max-width: 980px; margin: 0 auto; }
+    h1 { font-size: 22px; margin:0 }
+    .card { background: var(--card); padding: 16px; border-radius: 12px; margin-bottom: 16px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+    .flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    button { padding: 8px 12px; border-radius: 8px; border: 0; cursor: pointer; font-weight: 600;}
+    .primary { background: var(--pri); color: white; }
+    .secondary { background: var(--sec); color: white; }
+    .danger { background: #7f1d1d; color: #fee2e2; }
+    .success { color: var(--ok); }
+    .error { color: var(--err); }
+    .muted { color: var(--muted); font-size: 12px; }
+    a { color: #93c5fd; text-decoration: none; }
+    .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; background: var(--pill);}
+    .authed { background: #065f46; color: #d1fae5; }
+    .notauthed { background: #7f1d1d; color: #fee2e2; }
+    input, select, textarea {
+      background: #0b0e14; color: var(--txt); border: 1px solid #232838; border-radius: 8px;
+      padding: 8px 10px; width: 100%;
+    }
+    label{font-size:12px; color:var(--muted)}
+    .grid{display:grid; gap:12px}
+    .g2{grid-template-columns: repeat(2, minmax(0,1fr))}
+    .row{display:flex; gap:8px; flex-wrap:wrap}
+    .grow{flex:1}
+    .right{margin-left:auto}
+    .help{font-size:11px; color:var(--muted)}
+    .flash{padding:10px 12px; background:#0b1220; border:1px solid #11203d; border-radius:8px; margin-bottom:12px}
+    @media (max-width: 720px) {.g2{grid-template-columns: 1fr}}
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header><h1>YouTube Click Uploader</h1></header>
+  <main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

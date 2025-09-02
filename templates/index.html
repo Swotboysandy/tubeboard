@@ -1,90 +1,205 @@
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>YouTube Click Uploader</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 20px; color: #eaeaea; background: #0f1115; }
-    h1 { font-size: 22px; }
-    .card { background: #171923; padding: 16px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-    .flex { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    button { padding: 8px 12px; border-radius: 8px; border: 0; cursor: pointer; }
-    .primary { background: #2563eb; color: white; }
-    .secondary { background: #334155; color: white; }
-    .success { color: #10b981; }
-    .error { color: #ef4444; }
-    .muted { color: #94a3b8; font-size: 12px; }
-    a { color: #93c5fd; text-decoration: none; }
-    .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; }
-    .authed { background: #065f46; color: #d1fae5; }
-    .notauthed { background: #7f1d1d; color: #fee2e2; }
-    code { background: #0b0e14; padding: 2px 6px; border-radius: 6px; }
-  </style>
-</head>
-<body>
-  <h1>YouTube Click Uploader</h1>
+{% extends 'base.html' %}
+{% block content %}
 
-  <div class="card">
-    <div class="flex">
-      <a href="{{ url_for('account_form') }}"><button class="primary">+ Add Account</button></a>
-      <button class="secondary" onclick="refresh()">Refresh</button>
-    </div>
-    <p class="muted">Create multiple YouTube upload profiles. Authorize each once, then click “Run” to upload the next video from your configured source.</p>
+<div class="card">
+  <div class="flex">
+    <a href="{{ url_for('account_form') }}"><button class="primary">+ Add Account</button></a>
+    <button class="secondary" onclick="refresh()">Refresh</button>
   </div>
+  <p class="muted">Authorize once per account, then click “Run” to upload the next available video. Use “Browse Source” to scan, preview, and pick a specific file.</p>
+</div>
 
-  {% for a in accounts %}
-  <div class="card">
-    <div class="flex" style="justify-content: space-between;">
-      <div>
-        <div><strong>{{ a.name }}</strong></div>
-        <div class="muted">
-          {% if a.channel_title %} Channel: <strong>{{ a.channel_title }}</strong> · {% endif %}
-          Prefix: <code>{{ a.state_prefix }}</code>
-        </div>
-      </div>
-      <div class="flex">
-        {% if a.authed %}
-          <span class="pill authed">Authorized</span>
-        {% else %}
-          <span class="pill notauthed">Not Authorized</span>
-        {% endif %}
-        <a href="{{ url_for('account_form', idx=loop.index0) }}"><button class="secondary">Edit</button></a>
-        {% if a.authed %}
-          <button class="primary" onclick="runIdx({{ loop.index0 }})">▶ Run</button>
-        {% else %}
-          <a href="{{ url_for('auth_start', idx=loop.index0) }}"><button class="primary">Authorize</button></a>
-        {% endif %}
+{% for a in accounts %}
+<div class="card">
+  <div class="flex" style="justify-content: space-between;">
+    <div>
+      <div><strong>{{ a.name }}</strong></div>
+      <div class="muted">
+        {% if a.channel_title %} Channel: <strong>{{ a.channel_title }}</strong> · {% endif %}
+        Prefix: <code>{{ a.state_prefix }}</code>
       </div>
     </div>
-    <div style="margin-top: 8px;">
-      {% if a.status.status == "success" %}
-        <span class="success">✔ Last run: {{ a.status.last_run }}</span>
-        <div class="muted">Message: {{ a.status.message }}</div>
-      {% elif a.status.status == "error" %}
-        <span class="error">✘ Last run: {{ a.status.last_run }}</span>
-        <div class="muted">Message: {{ a.status.message }}</div>
+    <div class="flex">
+      {% if a.authed %}
+        <span class="pill authed">Authorized</span>
       {% else %}
-        <span class="muted">Never run</span>
+        <span class="pill notauthed">Not Authorized</span>
+      {% endif %}
+      <a href="{{ url_for('account_form', idx=loop.index0) }}"><button class="secondary">Edit</button></a>
+      {% if a.authed %}
+        {% if a.channel_url %}
+          <a href="{{ a.channel_url }}" target="_blank"><button class="secondary">Open Channel</button></a>
+        {% endif %}
+        <button class="primary" onclick="runIdx({{ loop.index0 }})">▶ Run</button>
+      {% else %}
+        <a href="{{ url_for('auth_start', idx=loop.index0) }}"><button class="primary">Authorize</button></a>
       {% endif %}
     </div>
   </div>
-  {% endfor %}
+
+  <!-- Last run -->
+  <div style="margin-top: 8px;">
+    {% if a.status.status == "success" %}
+      <span class="success">✔ Last run: {{ a.status.last_run }}</span>
+      {% if a.status_parsed and a.status_parsed.video_url %}
+        <div class="muted">Uploaded: <a href="{{ a.status_parsed.video_url }}" target="_blank">{{ a.status_parsed.video_url }}</a></div>
+      {% else %}
+        <div class="muted">Message: {{ a.status.message }}</div>
+      {% endif %}
+    {% elif a.status.status == "error" %}
+      <span class="error">✘ Last run: {{ a.status.last_run }}</span>
+      <div class="muted">Message: {{ a.status.message }}</div>
+    {% else %}
+      <span class="muted">Never run</span>
+    {% endif %}
+  </div>
+
+  <!-- Browse Source / Preview -->
+  <div class="flex" style="margin-top:12px; gap:8px">
+    <button class="secondary" onclick="previewNext({{ loop.index0 }})">Preview Next Upload</button>
+    <button class="secondary" onclick="scanSource({{ loop.index0 }})">Browse Source</button>
+    <button class="secondary" onclick="showUsed({{ loop.index0 }})">Show Used</button>
+    <button class="secondary" onclick="clearUsed({{ loop.index0 }})">Clear Used</button>
+    <span class="muted right">Source: <a href="{{ a.video_base_url }}" target="_blank">{{ a.video_base_url }}</a></span>
+  </div>
+
+  <div id="preview-{{ loop.index0 }}" class="muted" style="margin-top:8px"></div>
+
+  <div id="scan-wrap-{{ loop.index0 }}" style="margin-top:10px; display:none">
+    <div class="muted" style="margin-bottom:6px">Showing available files (exists=true). Pick a file and set as <b>Force Next</b> to upload that one on the next run.</div>
+    <div class="flex" style="gap:6px; margin-bottom:8px">
+      <label>Limit</label>
+      <input id="scan-limit-{{ loop.index0 }}" value="50" style="width:80px">
+      <label>Include used</label>
+      <select id="scan-include-{{ loop.index0 }}" style="width:110px">
+        <option value="true">true</option>
+        <option value="false" selected>false</option>
+      </select>
+      <button class="secondary" onclick="scanSource({{ loop.index0 }})">Rescan</button>
+    </div>
+    <div id="scan-{{ loop.index0 }}" class="muted"></div>
+    <div class="flex" style="margin-top:8px">
+      <input id="force-name-{{ loop.index0 }}" placeholder="Select a row or type exact filename (e.g., vid (12).mp4)" style="flex:1">
+      <button class="primary" onclick="forceNext({{ loop.index0 }})">Set Force Next</button>
+    </div>
+  </div>
+
+  <div id="used-{{ loop.index0 }}" class="muted" style="margin-top:8px; display:none"></div>
+</div>
+{% endfor %}
 
 <script>
+function refresh(){ location.reload(); }
+
 async function runIdx(idx) {
   const res = await fetch(`/run/${idx}`, {method: 'POST'});
   const data = await res.json();
-  if (!res.ok) {
-    alert('Error: ' + (data.error || JSON.stringify(data)));
+  if (!res.ok) alert('Error: ' + (data.error || JSON.stringify(data)));
+  else { alert('Started!'); setTimeout(refresh, 1500); }
+}
+
+async function previewNext(idx){
+  const el = document.getElementById(`preview-${idx}`);
+  el.textContent = 'Checking...';
+  const res = await fetch(`/preview/${idx}`);
+  const data = await res.json();
+  if (data.next_video_url) {
+    el.innerHTML = `Next video: <a href="${data.next_video_url}" target="_blank">${data.next_video_url}</a>`;
   } else {
-    alert('Started! Check status after a few seconds.');
-    setTimeout(refresh, 1500);
+    el.textContent = 'No usable video found (check base URL / filenames or manifest).';
   }
 }
-function refresh() {
-  location.reload();
+
+function showScanWrap(idx, show=true){
+  document.getElementById(`scan-wrap-${idx}`).style.display = show ? 'block' : 'none';
+}
+function showUsedWrap(idx, show=true){
+  document.getElementById(`used-${idx}`).style.display = show ? 'block' : 'none';
+}
+
+async function scanSource(idx){
+  showScanWrap(idx, true);
+  const limit = document.getElementById(`scan-limit-${idx}`).value || 50;
+  const includeUsed = document.getElementById(`scan-include-${idx}`).value || 'false';
+  const el = document.getElementById(`scan-${idx}`);
+  el.innerHTML = 'Scanning...';
+
+  const res = await fetch(`/scan/${idx}?limit=${encodeURIComponent(limit)}&include_used=${encodeURIComponent(includeUsed)}`);
+  const rows = await res.json();
+  if (!Array.isArray(rows)) {
+    el.textContent = 'Error: ' + (rows.error || JSON.stringify(rows));
+    return;
+  }
+  if (rows.length === 0) {
+    el.textContent = 'No files found. If you are not using a manifest, ensure your files are named vid.mp4 / vid (N).mp4 and accessible at the base URL.';
+    return;
+  }
+
+  // Build a small table
+  const html = `
+    <div style="overflow:auto">
+      <table style="width:100%; border-collapse:collapse">
+        <thead>
+          <tr style="text-align:left; border-bottom:1px solid #222">
+            <th style="padding:6px">Pick</th>
+            <th style="padding:6px">Name</th>
+            <th style="padding:6px">Exists</th>
+            <th style="padding:6px">Used</th>
+            <th style="padding:6px">Force</th>
+            <th style="padding:6px">URL</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r,i)=>`
+            <tr style="border-bottom:1px solid #1a1a1a">
+              <td style="padding:6px"><input type="radio" name="pick-${idx}" value="${r.name}" onchange="document.getElementById('force-name-${idx}').value=this.value"></td>
+              <td style="padding:6px; white-space:nowrap">${r.name}</td>
+              <td style="padding:6px">${r.exists ? 'true' : 'false'}</td>
+              <td style="padding:6px">${r.used ? 'true' : 'false'}</td>
+              <td style="padding:6px">${r.is_force ? 'true' : 'false'}</td>
+              <td style="padding:6px">${r.url ? `<a href="${r.url}" target="_blank">open</a>` : ''}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+  el.innerHTML = html;
+}
+
+async function forceNext(idx){
+  const name = document.getElementById(`force-name-${idx}`).value.trim();
+  if (!name) { alert('Type or select a filename first'); return; }
+  const res = await fetch(`/force-next/${idx}`, {
+    method:'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({name})
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    alert('Error: ' + (data.error || JSON.stringify(data)));
+    return;
+  }
+  alert('Force Next set to: ' + data.forced);
+}
+
+async function showUsed(idx){
+  showUsedWrap(idx, true);
+  const el = document.getElementById(`used-${idx}`);
+  el.textContent = 'Loading used list...';
+  const res = await fetch(`/used/${idx}`);
+  const data = await res.json();
+  if (!res.ok) { el.textContent = 'Error: ' + (data.error || JSON.stringify(data)); return; }
+  if (!Array.isArray(data) || data.length===0) { el.textContent = '(empty)'; return; }
+  el.innerHTML = '<div style="max-height:220px; overflow:auto">' + data.map(n=>`<div>${n}</div>`).join('') + '</div>';
+}
+
+async function clearUsed(idx){
+  if (!confirm('Clear used list for this account?')) return;
+  const res = await fetch(`/used/${idx}/clear`, {method:'POST'});
+  const data = await res.json();
+  if (!res.ok) { alert('Error: ' + (data.error || JSON.stringify(data))); return; }
+  alert('Used list cleared.');
 }
 </script>
-</body>
-</html>
+{% endblock %}
