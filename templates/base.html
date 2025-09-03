@@ -1,59 +1,197 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>{% block title %}YouTube Click Uploader{% endblock %}</title>
+
+  <!-- Design system -->
   <style>
     :root {
-      --bg: #0f1115; --card:#171923; --txt:#eaeaea; --muted:#94a3b8;
-      --pri:#2563eb; --sec:#334155; --ok:#10b981; --err:#ef4444; --pill:#0b1220;
+      --bg: #0c0f14;         --surface: #121622;       --card: #171b29;
+      --txt: #e7eaf0;        --muted: #a3aec2;         --muted-2:#94a3b8;
+      --border: #22293a;     --shadow: 0 2px 12px rgba(0,0,0,.25);
+
+      --pri: #2563eb;        --pri-600:#1e4ec2;        --pri-700:#173f9e;
+      --sec: #2b3446;        --sec-600:#222a3a;        --sec-700:#1a2130;
+
+      --ok: #10b981;         --warn:#f59e0b;           --err:#ef4444;
+      --pill: #0b1220;
+
+      --radius: 12px;        --radius-sm: 8px;
+      --gap: 12px;           --pad: 16px;
+
+      --fs-xxs: 11px;        --fs-xs: 12px;            --fs-sm: 14px;
+      --fs-md: 15.5px;       --fs-lg: 18px;            --fs-xl: 22px;
     }
-    *{box-sizing:border-box}
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-           margin:0; color: var(--txt); background: var(--bg);}
-    header { padding:16px 20px; border-bottom:1px solid #1f2430}
-    main { padding:20px; max-width: 980px; margin: 0 auto; }
-    h1 { font-size: 22px; margin:0 }
-    .card { background: var(--card); padding: 16px; border-radius: 12px; margin-bottom: 16px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-    .flex { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    button { padding: 8px 12px; border-radius: 8px; border: 0; cursor: pointer; font-weight: 600;}
-    .primary { background: var(--pri); color: white; }
-    .secondary { background: var(--sec); color: white; }
+
+    /* Reset-ish */
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0; color: var(--txt); background: linear-gradient(180deg, var(--bg), #0f1420 40%, #0b0f19);
+      font-size: var(--fs-md);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Layout */
+    header {
+      position: sticky; top: 0; z-index: 50;
+      backdrop-filter: saturate(1.2) blur(6px);
+      background: color-mix(in oklab, var(--surface) 88%, transparent);
+      border-bottom: 1px solid var(--border);
+    }
+    .bar {
+      display: flex; align-items: center; gap: 12px;
+      max-width: 1120px; margin: 0 auto; padding: 14px 20px;
+    }
+    .brand { font-weight: 700; font-size: var(--fs-xl); letter-spacing: .2px }
+    .cap { color: var(--muted); font-size: var(--fs-sm) }
+
+    main { max-width: 1120px; margin: 0 auto; padding: 22px 20px 36px; }
+
+    /* Cards */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--pad);
+      box-shadow: var(--shadow);
+      margin-bottom: 16px;
+    }
+    .card-h {
+      display: flex; gap: 12px; align-items: center; justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .card-title { font-size: var(--fs-lg); font-weight: 700; }
+    .subtle { color: var(--muted); font-size: var(--fs-sm); }
+
+    /* Grid & Flex */
+    .flex { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .row { display: grid; gap: 12px; }
+    .g2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    .g3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .grow { flex: 1 1 auto; }
+    .right { margin-left: auto; }
+
+    @media (max-width: 860px) {
+      .g3 { grid-template-columns: 1fr; }
+      .g2 { grid-template-columns: 1fr; }
+    }
+
+    /* Buttons */
+    button, .btn {
+      appearance: none; border: 0; border-radius: var(--radius-sm);
+      padding: 10px 14px; font-weight: 600; cursor: pointer;
+      transition: transform .04s ease, background .18s ease, border-color .18s ease;
+      outline: none;
+    }
+    button:active, .btn:active { transform: translateY(1px); }
+    button:focus-visible, .btn:focus-visible {
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .35);
+    }
+
+    .primary { background: var(--pri); color: #fff; }
+    .primary:hover { background: var(--pri-600); }
+    .secondary { background: var(--sec); color: #e7ecf7; border: 1px solid var(--sec-600); }
+    .secondary:hover { background: var(--sec-600); }
+    .ghost { background: transparent; color: #c3d2ff; border: 1px dashed var(--border); }
     .danger { background: #7f1d1d; color: #fee2e2; }
     .success { color: var(--ok); }
     .error { color: var(--err); }
-    .muted { color: var(--muted); font-size: 12px; }
-    a { color: #93c5fd; text-decoration: none; }
-    .pill { padding: 2px 8px; border-radius: 999px; font-size: 12px; background: var(--pill);}
-    .authed { background: #065f46; color: #d1fae5; }
-    .notauthed { background: #7f1d1d; color: #fee2e2; }
+
+    /* Inputs */
     input, select, textarea {
-      background: #0b0e14; color: var(--txt); border: 1px solid #232838; border-radius: 8px;
-      padding: 8px 10px; width: 100%;
+      width: 100%; padding: 10px 12px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: #0c1220; color: var(--txt);
+      outline: none; transition: border-color .18s ease;
+      font-size: var(--fs-md);
     }
-    label{font-size:12px; color:var(--muted)}
-    .grid{display:grid; gap:12px}
-    .g2{grid-template-columns: repeat(2, minmax(0,1fr))}
-    .row{display:flex; gap:8px; flex-wrap:wrap}
-    .grow{flex:1}
-    .right{margin-left:auto}
-    .help{font-size:11px; color:var(--muted)}
-    .flash{padding:10px 12px; background:#0b1220; border:1px solid #11203d; border-radius:8px; margin-bottom:12px}
-    @media (max-width: 720px) {.g2{grid-template-columns: 1fr}}
+    input::placeholder, textarea::placeholder { color: var(--muted-2); }
+    input:focus, select:focus, textarea:focus { border-color: #3a4a72; box-shadow: 0 0 0 3px rgba(58, 74, 114, .25); }
+
+    /* Pills / Badges */
+    .pill { padding: 4px 10px; border-radius: 999px; font-size: var(--fs-xs); background: var(--pill); border: 1px solid var(--border); }
+    .authed { background: #064e3b; color: #c7f0da; border-color: #0b7a59; }
+    .notauthed { background: #3a0f13; color: #fecaca; border-color: #7a1d26; }
+
+    /* Links */
+    a { color: #93c5fd; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Tables */
+    .table-wrap { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+    table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    th, td { text-align: left; padding: 10px 12px; }
+    thead th { font-size: var(--fs-sm); color: var(--muted); border-bottom: 1px solid var(--border); background: #121826; position: sticky; top: 0; }
+    tbody tr { border-bottom: 1px solid var(--border); }
+    tbody tr:hover { background: #131a2a; }
+
+    /* Alerts / Toasts */
+    .flash {
+      padding: 10px 12px; background: #0b1220; border: 1px solid #132342;
+      border-radius: var(--radius); margin-bottom: 12px;
+    }
+    .toast {
+      position: fixed; bottom: 16px; right: 16px; z-index: 9999;
+      background: #0b1220; border: 1px solid #132342; color: #e5edff;
+      padding: 10px 12px; border-radius: 10px; display:none;
+    }
+
+    /* Utilities */
+    .muted { color: var(--muted); font-size: var(--fs-sm); }
+    .hint { font-size: var(--fs-xs); color: var(--muted); }
+    .spacer { height: 6px; }
+    .hr { height: 1px; background: var(--border); margin: 12px 0; }
+
+    /* Disclosure */
+    details { border: 1px solid var(--border); border-radius: var(--radius); background: #0e1423; }
+    summary {
+      list-style: none; cursor: pointer; padding: 10px 12px; font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    summary::-webkit-details-marker { display: none; }
+    details[open] > summary { background: #10182a; }
+    .details-body { padding: 12px; }
   </style>
+
   {% block head %}{% endblock %}
 </head>
 <body>
-  <header><h1>YouTube Click Uploader</h1></header>
+  <header>
+    <div class="bar">
+      <div class="brand">YouTube Click Uploader</div>
+      <div class="cap">Fast one-click uploads from your source folders</div>
+      <div class="right flex">
+        <a class="btn secondary" href="{{ url_for('account_form') }}">+ Add Account</a>
+        <button class="btn ghost" onclick="location.reload()">Refresh</button>
+      </div>
+    </div>
+  </header>
+
   <main>
     {% with messages = get_flashed_messages() %}
       {% if messages %}
-        {% for m in messages %}<div class="flash">{{ m }}</div>{% endfor %}
+        {% for m in messages %}
+          <div class="flash">{{ m }}</div>
+        {% endfor %}
       {% endif %}
     {% endwith %}
+
     {% block content %}{% endblock %}
   </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    // Simple toast helper
+    function toast(msg, ms=1800) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.style.display = 'block';
+      setTimeout(()=> t.style.display='none', ms);
+    }
+  </script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

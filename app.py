@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
 import os, json, threading
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, jsonify, session, abort, flash
+from flask import (
+    Flask, render_template, request, redirect, url_for,
+    jsonify, session, abort, flash
+)
 from yt_runner import (
-    load_accounts, save_accounts, load_status, run_account, get_auth_flow_for_account,
-    store_credentials_for_account, has_valid_credentials, get_channel_title,
-    # new imports
+    load_accounts, save_accounts, load_status,
+    run_account, get_auth_flow_for_account,
+    store_credentials_for_account, has_valid_credentials,
+    # dashboard helpers
     peek_next_video_url, reset_used_list, scan_candidates, set_force_next,
     get_channel_info, get_channel_url, list_recent_uploads
 )
 
+# ---------------------------------------------------
+# App config
+# ---------------------------------------------------
 load_dotenv()
 
 app = Flask(__name__, static_url_path="/static")
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "change-me-please")
 
-# Enable http on localhost during dev
-if os.getenv("FLASK_DEBUG", "false").lower() in ("1","true","yes"):
+# Enable http on localhost during dev for OAuth
+if os.getenv("FLASK_DEBUG", "false").lower() in ("1", "true", "yes"):
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 SCOPES = [
@@ -25,12 +32,17 @@ SCOPES = [
     "https://www.googleapis.com/auth/youtubepartner",
 ]
 
+# one lock per account index to prevent concurrent runs
 _run_locks = {}
 
+# ---------------------------------------------------
+# Helpers
+# ---------------------------------------------------
 def _safe_idx(idx, accounts):
     return idx is not None and 0 <= idx < len(accounts)
 
 def _redirect_base():
+    # e.g. http://127.0.0.1:5000
     return request.url_root.rstrip("/")
 
 def background_run(acct, idx: int):
@@ -40,11 +52,15 @@ def background_run(acct, idx: int):
     finally:
         _run_locks[idx] = False
 
+# ---------------------------------------------------
+# Routes: Dashboard
+# ---------------------------------------------------
 @app.route("/")
 def index():
     accounts = load_accounts()
     for acct in accounts:
-        st = load_status(acct["state_prefix"])
+        # status & parsed message
+        st = load_status(acct.get("state_prefix", ""))
         acct["status"] = st
         acct["status_parsed"] = None
         if st.get("status") == "success":
@@ -52,10 +68,14 @@ def index():
                 acct["status_parsed"] = json.loads(st.get("message") or "{}")
             except Exception:
                 pass
+
+        # auth check
         try:
             acct["authed"] = has_valid_credentials(acct)
         except Exception:
             acct["authed"] = False
+
+        # channel info if authed
         if acct["authed"]:
             try:
                 info = get_channel_info(acct)
@@ -67,12 +87,13 @@ def index():
         else:
             acct["channel_title"] = None
             acct["channel_url"] = None
+
     return render_template("index.html", accounts=accounts)
 
 @app.route("/status")
 def all_status():
     accounts = load_accounts()
-    return jsonify([load_status(acct["state_prefix"]) for acct in accounts])
+    return jsonify([load_status(acct.get("state_prefix", "")) for acct in accounts])
 
 @app.route("/run/<int:idx>", methods=["POST"])
 def run_now(idx):
@@ -83,11 +104,14 @@ def run_now(idx):
         return jsonify({"error": "Already running"}), 429
     if not has_valid_credentials(accounts[idx]):
         return jsonify({"error": "Account is not authorized yet"}), 400
+
     t = threading.Thread(target=background_run, args=(accounts[idx], idx), daemon=True)
     t.start()
     return jsonify({"status": "started"}), 202
 
-# ---- NEW: preview/scan/force/used endpoints ----
+# ---------------------------------------------------
+# Routes: Preview / Scan / Force / Used
+# ---------------------------------------------------
 @app.route("/preview/<int:idx>")
 def preview_next(idx):
     accounts = load_accounts()
@@ -101,8 +125,11 @@ def scan(idx):
     accounts = load_accounts()
     if not _safe_idx(idx, accounts):
         return jsonify({"error": "Invalid account index"}), 400
-    limit = int(request.args.get("limit", 50))
-    include_used = request.args.get("include_used", "true").lower() in ("1","true","yes")
+    try:
+        limit = int(request.args.get("limit", 50))
+    except ValueError:
+        limit = 50
+    include_used = request.args.get("include_used", "true").lower() in ("1", "true", "yes")
     items = scan_candidates(accounts[idx], limit=limit, include_used=include_used)
     return jsonify(items)
 
@@ -133,9 +160,11 @@ def clear_used(idx):
     if not _safe_idx(idx, accounts):
         return jsonify({"error": "Invalid account index"}), 400
     reset_used_list(accounts[idx]["state_prefix"])
-    return jsonify({"status":"ok"})
+    return jsonify({"status": "ok"})
 
-# ---- Channel info / latest (optional) ----
+# ---------------------------------------------------
+# Routes: Channel info (optional for UI widgets)
+# ---------------------------------------------------
 @app.route("/latest/<int:idx>")
 def latest_uploads(idx):
     accounts = load_accounts()
@@ -146,16 +175,19 @@ def latest_uploads(idx):
     items = list_recent_uploads(accounts[idx], max_results=int(request.args.get("n", 5)))
     return jsonify(items)
 
-# ---- Account CRUD & OAuth ----
+# ---------------------------------------------------
+# Routes: Account CRUD
+# ---------------------------------------------------
 @app.route("/account/new", methods=["GET", "POST"])
 @app.route("/account/<int:idx>/edit", methods=["GET", "POST"])
 def account_form(idx=None):
     accounts = load_accounts()
     acct = accounts[idx] if _safe_idx(idx, accounts) else {}
+
     if request.method == "POST":
+        # Normalize token file path from form
         state_prefix = request.form["state_prefix"].strip()
         token_file_raw = request.form["token_file"].strip()
-
         token_file = token_file_raw.replace("\\", "/").rstrip("/")
         if token_file.lower() in ("", "tokens"):
             token_file = f"tokens/{state_prefix}.json"
@@ -168,12 +200,14 @@ def account_form(idx=None):
             "state_prefix": state_prefix,
             "type": request.form["type"].strip(),
             "video_base_url": request.form["video_base_url"].strip(),
+
+            # optional content sources
             "manifest_url": request.form.get("manifest_url", "").strip(),
             "title_url": request.form.get("title_url", "").strip(),
             "description_url": request.form.get("description_url", "").strip(),
             "tags_url": request.form.get("tags_url", "").strip(),
 
-            # Thumbnail sources
+            # thumbnail sources
             "thumbnail_url": request.form.get("thumbnail_url", "").strip(),
             "thumb_manifest_url": request.form.get("thumb_manifest_url", "").strip(),
             "thumbnail_base_url": request.form.get("thumbnail_base_url", "").strip(),
@@ -181,6 +215,8 @@ def account_form(idx=None):
             "slides_per_post": int(request.form.get("slides_per_post", "1") or "1"),
             "client_secrets_file": request.form["client_secrets_file"].strip(),
             "token_file": token_file,
+
+            # upload options
             "privacy_status": request.form.get("privacy_status", "private"),
             "category_id": request.form.get("category_id", "22"),
             "made_for_kids": request.form.get("made_for_kids", "false"),
@@ -188,30 +224,53 @@ def account_form(idx=None):
             "default_language": request.form.get("default_language", "").strip(),
             "playlist_id": request.form.get("playlist_id", "").strip(),
             "schedule_publish_at": request.form.get("schedule_publish_at", "").strip(),
+
+            # candidate generation
             "include_plain_vid": request.form.get("include_plain_vid", "auto").strip(),
             "max_index": int(request.form.get("max_index", "2000") or "2000"),
         }
 
+        # ---- Uniqueness validation (prevents token reuse & prefix collisions) ----
+        others = [a for i, a in enumerate(accounts) if i != (idx if idx is not None else -1)]
+
+        # (a) unique state_prefix
+        if any(a.get("state_prefix") == data["state_prefix"] for a in others):
+            flash("State Prefix must be unique. Another account already uses this prefix.", "error")
+            return render_template("account_form.html", account=data), 400
+
+        # (b) unique token_file path (avoid reusing tokens across accounts)
+        tf_norm = os.path.normpath(data["token_file"]).lower()
+        if any(os.path.normpath(a.get("token_file", "")).lower() == tf_norm
+               and a.get("state_prefix") != data["state_prefix"] for a in others):
+            flash("Token File path is already used by another account. Choose a unique file.", "error")
+            return render_template("account_form.html", account=data), 400
+
+        # Save/Update
         if acct and idx is not None:
             accounts[idx] = data
         else:
             accounts.append(data)
 
         save_accounts(accounts)
+        flash("Account saved")
         return redirect(url_for("index"))
 
+    # GET
     return render_template("account_form.html", account=acct)
 
 @app.route("/account/<int:idx>/delete", methods=["POST"])
 def account_delete(idx):
     accounts = load_accounts()
     if not _safe_idx(idx, accounts):
-        return jsonify({"error":"Invalid account index"}), 400
+        return jsonify({"error": "Invalid account index"}), 400
     accounts.pop(idx)
     save_accounts(accounts)
     flash("Account deleted")
     return redirect(url_for("index"))
 
+# ---------------------------------------------------
+# Routes: OAuth
+# ---------------------------------------------------
 @app.route("/auth/<int:idx>/start")
 def auth_start(idx):
     accounts = load_accounts()
@@ -220,7 +279,9 @@ def auth_start(idx):
     acct = accounts[idx]
     flow = get_auth_flow_for_account(acct, SCOPES, _redirect_base())
     auth_url, state = flow.authorization_url(
-        access_type="offline", include_granted_scopes="true", prompt="consent"
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent"
     )
     session["oauth_state"] = state
     session["oauth_idx"] = idx
@@ -232,6 +293,7 @@ def oauth2callback():
     accounts = load_accounts()
     if not _safe_idx(idx, accounts):
         return "Invalid session state", 400
+
     acct = accounts[idx]
     try:
         from google_auth_oauthlib.flow import Flow
@@ -243,7 +305,7 @@ def oauth2callback():
         flow.redirect_uri = _redirect_base() + "/oauth2callback"
         flow.fetch_token(authorization_response=request.url)
         creds = flow.credentials
-        store_credentials_for_account(acct, creds)
+        store_credentials_for_account(acct, creds)  # writes token file & updates accounts.json
         accounts[idx] = acct
         save_accounts(accounts)
         flash("Authorization successful")
@@ -251,7 +313,14 @@ def oauth2callback():
     except Exception as e:
         return f"Authorization failed: {e}", 400
 
+# ---------------------------------------------------
+# Entrypoint
+# ---------------------------------------------------
 if __name__ == "__main__":
     os.makedirs("tokens", exist_ok=True)
     os.makedirs("secrets", exist_ok=True)
-    app.run(host="127.0.0.1", port=5000, debug=os.getenv("FLASK_DEBUG","true").lower() in ("1","true","yes"))
+    app.run(
+        host=os.getenv("FLASK_HOST", "127.0.0.1"),
+        port=int(os.getenv("FLASK_PORT", "5000")),
+        debug=os.getenv("FLASK_DEBUG", "true").lower() in ("1", "true", "yes"),
+    )

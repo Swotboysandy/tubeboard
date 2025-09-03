@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-import os, json, random, tempfile, requests
+import os, json, tempfile, requests
 from urllib.parse import quote
 from datetime import datetime
 from typing import Optional, Tuple, List, Dict
+
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
@@ -13,7 +14,9 @@ from google.auth.transport.requests import Request as GARequest
 ACCOUNTS_FILE = "accounts.json"
 STATUS_SUFFIX = "_status.json"
 
-# ---------------- Status I/O ----------------
+# =========================
+# Status I/O
+# =========================
 def status_path(prefix): return f"{prefix}{STATUS_SUFFIX}"
 
 def save_status(prefix, status, message=""):
@@ -32,7 +35,9 @@ def load_status(prefix):
         "last_run": None, "status": "never", "message": ""
     }
 
-# ---------------- State helpers ----------------
+# =========================
+# Small state helpers
+# =========================
 def _state_file(prefix, key): return f"{prefix}_{key}.json"
 
 def load_last_index(prefix, key):
@@ -76,7 +81,9 @@ def set_force_next(prefix, name: Optional[str]):
     with open(fn, "w", encoding="utf-8") as f:
         json.dump({"name": name}, f, indent=2)
 
-# ---------------- Accounts ----------------
+# =========================
+# Accounts file
+# =========================
 def load_accounts(path=ACCOUNTS_FILE):
     return json.load(open(path, "r", encoding="utf-8")) if os.path.isfile(path) else []
 
@@ -84,7 +91,9 @@ def save_accounts(accounts, path=ACCOUNTS_FILE):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(accounts, f, indent=2)
 
-# ---------------- Content fetchers ----------------
+# =========================
+# Content fetchers
+# =========================
 def fetch_lines(url):
     r = requests.get(url, timeout=30)
     r.raise_for_status()
@@ -126,7 +135,9 @@ def _download_to_tmp(url, suffix):
             if chunk: f.write(chunk)
     return path
 
-# ---------------- Candidate picking / scanning ----------------
+# =========================
+# Candidate picking / scanning
+# =========================
 def _url_exists(url, timeout=8):
     try:
         h = requests.head(url, timeout=timeout, allow_redirects=True)
@@ -165,7 +176,6 @@ def _exts(): return [".mp4", ".mov", ".m4v", ".webm"]
 def peek_next_video_url(cfg) -> Optional[str]:
     used = set(load_used_list(cfg["state_prefix"]))
     base = cfg["video_base_url"].rstrip("/")
-    # honor force-next if exists AND exists at URL
     force_name = get_force_next(cfg["state_prefix"])
     if force_name:
         base_name, ext = os.path.splitext(force_name)
@@ -184,11 +194,6 @@ def peek_next_video_url(cfg) -> Optional[str]:
     return None
 
 def scan_candidates(cfg, limit=100, include_used=True) -> List[Dict]:
-    """
-    Probe candidates and return a list of:
-    {name, url, exists, used, is_force}
-    Up to `limit` 'exists==True' entries (keeps trying until we collect that many or we run out of names).
-    """
     base = cfg["video_base_url"].rstrip("/")
     used = set(load_used_list(cfg["state_prefix"]))
     force_name = get_force_next(cfg["state_prefix"])
@@ -212,7 +217,6 @@ def scan_candidates(cfg, limit=100, include_used=True) -> List[Dict]:
             "used": name in used,
             "is_force": (name == force_name)
         }
-        # show all if include_used; otherwise skip used
         if info["exists"]:
             if include_used or not info["used"]:
                 results.append(info)
@@ -222,10 +226,9 @@ def scan_candidates(cfg, limit=100, include_used=True) -> List[Dict]:
     return results
 
 def next_video(cfg) -> Tuple[Optional[str], Optional[str]]:
-    """Return (remote_url, local_path) and mark candidate used. Honors 'force next' if valid."""
     used = set(load_used_list(cfg["state_prefix"]))
     base = cfg["video_base_url"].rstrip("/")
-    # 1) forced file first
+    # forced first
     force_name = get_force_next(cfg["state_prefix"])
     if force_name and force_name not in used:
         base_name, ext = os.path.splitext(force_name)
@@ -236,9 +239,9 @@ def next_video(cfg) -> Tuple[Optional[str], Optional[str]]:
                 local_path = _download_to_tmp(url, os.path.splitext(n)[1] or ".mp4")
                 used.add(force_name)
                 save_used_list(cfg["state_prefix"], list(used))
-                set_force_next(cfg["state_prefix"], None)  # clear after use
+                set_force_next(cfg["state_prefix"], None)
                 return url, local_path
-    # 2) normal auto-pick
+    # auto-pick
     for name in _gen_candidates(cfg):
         if name in used: continue
         base_name, ext = os.path.splitext(name)
@@ -252,25 +255,21 @@ def next_video(cfg) -> Tuple[Optional[str], Optional[str]]:
                 return url, local_path
     return None, None
 
-# ---------------- OAuth helpers ----------------
+# =========================
+# OAuth & credentials
+# =========================
 def _normalized_token_file(token_path, state_prefix="yt"):
     token_path = (token_path or "").strip()
     if token_path.lower().replace("\\", "/").rstrip("/\\") in ("", "tokens"):
         token_path = os.path.join("tokens", f"{state_prefix}.json")
     if os.path.isdir(token_path):
-        token_path = os.path.join(token_path, f"{state_prefix}.json")
+        token_path = os.path.join(token_file, f"{state_prefix}.json")
     parent = os.path.dirname(token_path) or "."
     os.makedirs(parent, exist_ok=True)
     return token_path
 
-def get_auth_flow_for_account(acct, scopes, redirect_base) -> Flow:
-    redirect_uri = redirect_base.rstrip("/") + "/oauth2callback"
-    return Flow.from_client_secrets_file(
-        acct["client_secrets_file"], scopes=scopes, redirect_uri=redirect_uri
-    )
-
-def store_credentials_for_account(acct, credentials):
-    token_path = _normalized_token_file(acct.get("token_file"), acct.get("state_prefix", "yt"))
+def _write_token_file(token_path, credentials):
+    os.makedirs(os.path.dirname(token_path) or ".", exist_ok=True)
     data = {
         "token": credentials.token,
         "refresh_token": credentials.refresh_token,
@@ -282,9 +281,28 @@ def store_credentials_for_account(acct, credentials):
     }
     with open(token_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+
+def get_auth_flow_for_account(acct, scopes, redirect_base) -> Flow:
+    redirect_uri = redirect_base.rstrip("/") + "/oauth2callback"
+    return Flow.from_client_secrets_file(
+        acct["client_secrets_file"], scopes=scopes, redirect_uri=redirect_uri
+    )
+
+def store_credentials_for_account(acct, credentials):
+    token_path = _normalized_token_file(acct.get("token_file"), acct.get("state_prefix", "yt"))
+    _write_token_file(token_path, credentials)
     acct["token_file"] = token_path
-    rest = [a for a in load_accounts() if a.get("state_prefix") != acct.get("state_prefix")]
-    save_accounts([acct] + rest)
+
+    accounts = load_accounts()
+    updated = False
+    for i, a in enumerate(accounts):
+        if a.get("state_prefix") == acct.get("state_prefix"):
+            accounts[i] = {**a, **acct}
+            updated = True
+            break
+    if not updated:
+        accounts.append(acct)
+    save_accounts(accounts)
 
 def _load_credentials(token_path) -> Optional[Credentials]:
     try:
@@ -297,15 +315,38 @@ def _load_credentials(token_path) -> Optional[Credentials]:
         if creds and creds.expired and creds.refresh_token:
             try:
                 creds.refresh(GARequest())
-                store_credentials_for_account({"state_prefix":"tmp","token_file":token_path}, creds)
+                _write_token_file(token_path, creds)
             except Exception:
                 pass
         return creds
     except Exception:
         return None
 
+REQUIRED_SCOPES = {
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube",
+    "https://www.googleapis.com/auth/youtubepartner",
+}
+
+def _read_client_id_from_secrets(client_secrets_file: str) -> str | None:
+    try:
+        with open(client_secrets_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        container = data.get("installed") or data.get("web") or {}
+        return container.get("client_id")
+    except Exception:
+        return None
+
 def has_valid_credentials(acct):
-    return _load_credentials(acct.get("token_file")) is not None
+    creds = _load_credentials(acct.get("token_file"))
+    if not creds: return False
+    if not REQUIRED_SCOPES.issubset(set(getattr(creds, "scopes", []) or [])):
+        return False
+    token_client_id = getattr(creds, "client_id", None)
+    secrets_client_id = _read_client_id_from_secrets(acct.get("client_secrets_file") or "")
+    if not token_client_id or not secrets_client_id or token_client_id != secrets_client_id:
+        return False
+    return True
 
 def _yt(acct):
     creds = _load_credentials(acct.get("token_file"))
@@ -313,13 +354,15 @@ def _yt(acct):
         raise RuntimeError("No credentials for account; please click Authorize first.")
     return build("youtube", "v3", credentials=creds, static_discovery=False)
 
+# =========================
+# Channel info (dashboard)
+# =========================
 def get_channel_title(acct):
     yt = _yt(acct)
     resp = yt.channels().list(part="snippet", mine=True).execute()
     items = resp.get("items", [])
     return items[0]["snippet"]["title"] if items else None
 
-# --- Channel info helpers (optional for your dashboard) ---
 def get_channel_info(acct):
     yt = _yt(acct)
     resp = yt.channels().list(part="snippet,contentDetails", mine=True).execute()
@@ -368,7 +411,9 @@ def list_recent_uploads(acct, max_results=5):
         })
     return out
 
-# ---------------- Upload / Publish ----------------
+# =========================
+# Upload / Thumbnail
+# =========================
 def upload_video(local_path, meta, acct):
     yt = _yt(acct)
     body = {
@@ -414,6 +459,7 @@ def upload_video(local_path, meta, acct):
                                   "resourceId": {"kind": "youtube#video", "videoId": video_id}}},
             ).execute()
         except HttpError:
+            # playlist add is best-effort
             pass
 
     return {"video_id": video_id, "video_url": f"https://www.youtube.com/watch?v={video_id}"}
@@ -427,47 +473,6 @@ def set_thumbnail(video_id, thumb_path, acct):
     except HttpError:
         return False
 
-# ---------------- Single account runner ----------------
-def run_account(cfg):
-    prefix = cfg["state_prefix"]
-    save_status(prefix, "running", "")
-    try:
-        # Pick + download video (honors force-next)
-        _, local_video = next_video(cfg)
-        if not local_video:
-            raise RuntimeError("No videos left / download failed")
-
-        meta = {
-            "title": next_title(cfg),
-            "description": next_description(cfg),
-            "tags": next_tags(cfg),
-            "privacy_status": cfg.get("privacy_status", "private"),
-            "category_id": cfg.get("category_id", "22"),
-            "default_language": cfg.get("default_language", ""),
-            "playlist_id": cfg.get("playlist_id", ""),
-            "schedule_publish_at": cfg.get("schedule_publish_at", ""),
-            "self_declared_mfk": cfg.get("self_declared_mfk", "false"),
-            "made_for_kids": cfg.get("made_for_kids", "false"),
-        }
-
-        result = upload_video(local_video, meta, cfg)
-
-        # Thumbnail attempts (single > manifest > folder-seq)
-        _, thumb_local = maybe_thumbnail(cfg)
-        if thumb_local:
-            try:
-                set_thumbnail(result["video_id"], thumb_local, cfg)
-            except Exception:
-                pass
-
-        save_status(prefix, "success", json.dumps(result))
-        return result
-
-    except Exception as e:
-        save_status(prefix, "error", str(e))
-        return None
-
-# ---------------- Thumbnails sources ----------------
 def maybe_thumbnail(cfg) -> Tuple[Optional[str], Optional[str]]:
     one = (cfg.get("thumbnail_url") or "").strip()
     if one:
@@ -498,3 +503,51 @@ def maybe_thumbnail(cfg) -> Tuple[Optional[str], Optional[str]]:
         return url, path
     except Exception:
         return None, None
+
+# =========================
+# Single account runner (EXPORTED)
+# =========================
+def run_account(cfg):
+    """
+    Picks a video (honors force-next), uploads it with title/desc/tags,
+    optionally sets thumbnail, updates status, returns upload result dict.
+    """
+    prefix = cfg["state_prefix"]
+    save_status(prefix, "running", "")
+    try:
+        # Pick + download video
+        _, local_video = next_video(cfg)
+        if not local_video:
+            raise RuntimeError("No videos left / download failed")
+
+        # Compose metadata
+        meta = {
+            "title": next_title(cfg),
+            "description": next_description(cfg),
+            "tags": next_tags(cfg),
+            "privacy_status": cfg.get("privacy_status", "private"),
+            "category_id": cfg.get("category_id", "22"),
+            "default_language": cfg.get("default_language", ""),
+            "playlist_id": cfg.get("playlist_id", ""),
+            "schedule_publish_at": cfg.get("schedule_publish_at", ""),
+            "self_declared_mfk": cfg.get("self_declared_mfk", "false"),
+            "made_for_kids": cfg.get("made_for_kids", "false"),
+        }
+
+        # Upload
+        result = upload_video(local_video, meta, cfg)
+
+        # Try thumbnail sources
+        _, thumb_local = maybe_thumbnail(cfg)
+        if thumb_local:
+            try:
+                set_thumbnail(result["video_id"], thumb_local, cfg)
+            except Exception:
+                pass
+
+        save_status(prefix, "success", json.dumps(result))
+        return result
+
+    except Exception as e:
+        save_status(prefix, "error", str(e))
+        return None
